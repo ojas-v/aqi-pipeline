@@ -1,0 +1,20 @@
+{
+  "model": "gradient_boosting",
+  "test_metrics": {
+    "rmse": 6.395516453226832,
+    "mae": 4.575991385823268,
+    "r2": 0.9567748002115393
+  },
+  "config": {
+    "raw_data_path": "C:\\Users\\ojasv\\aqi_pipeline\\raw_data.csv",
+    "artifacts_dir": "C:\\Users\\ojasv\\aqi_pipeline\\artifacts",
+    "n_rows": "2000",
+    "start_date": "2025-01-01",
+    "random_state": "42",
+    "impute_strategy": "median",
+    "iqr_multiplier": "1.5",
+    "test_size": "0.2",
+    "cv_folds": "5",
+    "candidate_models": "('random_forest', 'gradient_boosting')"
+  }
+}
