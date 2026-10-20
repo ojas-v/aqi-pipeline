@@ -205,15 +205,18 @@ These limitations define the next stage of development rather than being capabil
 - [ ] Monitor data drift and prediction quality over time.
 - [ ] Develop a deployable inference API and interactive dashboard.
 
-## Author
 
-**Ojas Vaidya**
+## Team
 
-ECE Student | Communication Systems | Machine Learning and Signal Processing
+**AQI Sentinel** was developed by a team of Electronics and Communication Engineering (ECE) students.
 
-- GitHub: [ojas-v](https://github.com/ojas-v)
-- LinkedIn: [Ojas Vaidya](https://www.linkedin.com/in/ojas-vaidya-833665365/)
+| Team Member | Discipline |
+|:--|:--|
+| **Ojas Vaidya** | Electronics and Communication Engineering |
+| **Vivek Raj** | Electronics and Communication Engineering |
+| **Sarang Bobade** | Electronics and Communication Engineering |
 
 ---
 
-*Built to explore the intersection of environmental sensing, data engineering, and machine learning.*
+*Built by ECE students exploring the intersection of environmental sensing, data engineering, and machine learning.*
+
