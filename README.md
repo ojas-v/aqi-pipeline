@@ -1,222 +1,201 @@
-
 # AQI Sentinel
+
 ### Smart-City Air Quality Prediction | End-to-End Machine Learning Pipeline
 
-**Turning noisy environmental data into actionable air-quality insights.**
+**Turning noisy environmental sensor data into a validated, leakage-safe AQI prediction model.**
 
-AQI Sentinel is an end-to-end machine learning pipeline that simulates multi-station environmental readings, handles imperfect sensor data, engineers physically motivated features, and trains and evaluates an AQI prediction model.
+AQI Sentinel simulates multi-station environmental readings, deliberately corrupts them the way real sensors fail, cleans and validates the data, engineers physically motivated features, and trains and evaluates a regression model. The emphasis is on **data quality, leakage-safe preprocessing, modular architecture and reproducibility**, not on chasing a score.
 
-Built with Python and scikit-learn, the project focuses on more than model accuracy: **data quality, leakage-safe preprocessing, modular architecture, and reproducibility** are first-class design goals.
+**[View the live results dashboard](https://ojas-v.github.io/aqi-pipeline/)** (needs internet; Chart.js loads from a CDN)
 
-[View the Results Dashboard](AQI%20Prediction%20%E2%80%93%20Results%20Dashboard.html)
+---
+
+## Results
+
+Single reproducible run (`random_state=42`, 2,000 generated rows, 80/20 split, 5-fold CV on the training split).
+
+| Metric (hold-out test set) | Value |
+|:---|---:|
+| **RMSE** | 6.26 AQI points |
+| **MAE** | 4.49 AQI points |
+| **R²** | 0.959 |
+| Selected model | Gradient Boosting (lowest CV RMSE) |
+
+| Candidate (5-fold CV, whole pipeline) | CV RMSE | CV R² |
+|:---|---:|---:|
+| Gradient Boosting | 7.38 | 0.951 |
+| Random Forest | 7.82 | 0.945 |
+
+**Cleaning effect (training split):** IQR capping plus median imputation reduces PM2.5 variance from roughly 4,700 to roughly 260, because injected sensor spikes dominate the raw variance.
+
+**Feature importance:** about 81 % of the model's importance sits on `pm25_ugm3`, followed by `pm10_ugm3` (about 12 %) and the engineered `pm_fine_fraction` (about 4 %). This matches how the target is built (see [Limitations](#limitations-and-scientific-validity)): the high R² is expected by construction.
+
+> Exact figures can differ in the last decimals across scikit-learn / pandas versions. The authoritative numbers for your machine are in `artifacts/metrics.json` after running `python main.py`.
 
 ---
 
 ## At a Glance
 
 | Component | Details |
-|:--|:--|
-| **Domain** | Environmental Data Science and Smart Cities |
-| **Task** | Air Quality Index (AQI) regression |
-| **Language** | Python |
-| **ML Framework** | scikit-learn |
-| **Data Engineering** | Validation, cleaning, and feature engineering |
-| **Evaluation** | Cross-validation and regression metrics |
-| **Pipeline** | Data generation → Ingestion → Cleaning → Training → Evaluation |
+|:---|:---|
+| **Domain** | Environmental data science, smart cities |
+| **Task** | AQI regression (nowcast) |
+| **Language** | Python 3.10+ |
+| **ML framework** | scikit-learn (`Pipeline`, `ColumnTransformer`, `KFold`) |
+| **Data engineering** | Schema validation, rule-based cleaning, IQR capping, imputation |
+| **Evaluation** | K-fold cross-validation of the full pipeline; RMSE, MAE, R² |
+| **Flow** | Generation → Ingestion → Cleaning → Training → Evaluation |
 
 ## Why This Project?
 
-Real-world sensor data is rarely clean. Readings can be missing, corrupted, duplicated, or affected by extreme values.
+Real sensor data is never clean: readings go missing, loggers emit sentinel codes such as `-999`, spikes appear, and the label itself can be absent. AQI Sentinel treats those failures as the main problem and builds a pipeline that:
 
-AQI Sentinel addresses these challenges through a modular pipeline designed to:
-
-- **Simulate imperfect sensor data** with synthetic environmental readings, missing values, and injected faults.
-- **Validate and clean incoming data** through schema checks, type coercion, duplicate handling, and physical-bound validation.
-- **Engineer domain-informed features** using temporal cycles, pollutant ratios, and environmental interactions.
-- **Prevent data leakage** by fitting learned preprocessing operations only on training data.
-- **Evaluate models systematically** using cross-validation and regression metrics.
-- **Persist trained artifacts** for repeatable evaluation and downstream inference.
+- **Simulates imperfect data** with physically motivated signals, then injects spikes, impossible values, sentinel codes, scattered NaNs and a contiguous sensor outage.
+- **Validates input** through schema checks, dtype coercion and physical-bound rules.
+- **Prevents leakage** by fitting every learned statistic (IQR fences, medians, scaler, encoder) on training data only.
+- **Engineers domain features**: cyclical time terms, a temperature-humidity interaction, a PM2.5/PM10 ratio and a stagnation index.
+- **Selects models honestly** by cross-validating the entire pipeline, preprocessing included.
+- **Persists** the fitted pipeline and metrics for repeatable inference.
 
 ## The Pipeline
 
 ```mermaid
 flowchart TD
-    A["Synthetic Sensor Data"] --> B["Data Ingestion"]
-    B --> C["Schema Validation"]
-    C --> D["Data Cleaning"]
-    D --> E["Feature Engineering"]
-    E --> F["Preprocessing Pipeline"]
-    F --> G["Model Training and Cross-Validation"]
-    G --> H["Model Evaluation"]
-    H --> I["Saved Model and Metrics"]
+    A["Synthetic Sensor Data"] --> B["Ingestion + Schema Validation"]
+    B --> C["Stateless Cleaning Rules"]
+    C --> D["Train / Test Split"]
+    D --> E["sklearn Pipeline (fit on train only)"]
+    E --> E1["Temporal features"]
+    E1 --> E2["IQR cap + median impute"]
+    E2 --> E3["Interaction features"]
+    E3 --> E4["Scale + one-hot"]
+    E4 --> F["CV model selection"]
+    F --> G["Hold-out evaluation"]
+    G --> H["Saved model + metrics"]
 ```
 
-### Pipeline Stages
-
-| Stage | Responsibility |
-|:--|:--|
-| **01. Generation** | Generate synthetic environmental observations with injected faults and missing values. |
-| **02. Ingestion** | Load data, validate its schema, and coerce appropriate data types. |
-| **03. Cleaning** | Handle duplicates, invalid measurements, missing labels, and extreme observations. |
-| **04. Feature Engineering** | Extract temporal cycles and physically motivated interaction features. |
-| **05. Preprocessing** | Apply outlier capping, imputation, scaling, and categorical encoding as configured. |
-| **06. Modeling** | Train candidate regressors and evaluate them using cross-validation. |
-| **07. Evaluation** | Calculate regression metrics and save evaluation results. |
-| **08. Persistence** | Store the fitted model and metrics for later use. |
-
-## Tech Stack
-
-- **Python** for implementation and orchestration
-- **NumPy and Pandas** for numerical computation and tabular data processing
-- **scikit-learn** for preprocessing, feature transformations, cross-validation, and regression
-- **Joblib** for model persistence
-- **CSV and JSON** for data and metrics storage
-
-See [`requirements.txt`](requirements.txt) for the project's dependencies.
+| Stage | Responsibility | Module |
+|:---|:---|:---|
+| 1. Generation | Physics-based data with injected faults and gaps → `raw_data.csv` | `data_generator.py` |
+| 2. Ingestion | Load CSV, validate schema, coerce dtypes, translate I/O errors | `src/ingestion.py` |
+| 3. Cleaning | Drop duplicates and unlabeled rows, mask impossible readings, report before/after statistics | `src/cleaning.py` |
+| 4. Features | Cyclical time, interaction and ratio features, `ColumnTransformer` assembly | `src/features.py` |
+| 5. Modeling | Candidate registry, K-fold CV, model selection, hold-out metrics, persistence | `src/modeling.py` |
+| Orchestration | Runs stages 1–5 in order with centralized error handling | `main.py` |
 
 ## Project Structure
 
-```text
+```
 aqi-pipeline/
-├── main.py                 # End-to-end pipeline orchestrator
-├── data_generator.py       # Synthetic environmental data generation
-├── requirements.txt        # Python dependencies
+├── main.py                 # Pipeline orchestrator
+├── data_generator.py       # Synthetic data generation (Phase 1)
+├── requirements.txt
 ├── README.md
 ├── .gitignore
-├── raw_data.csv            # Generated input dataset
-├── artifacts/
-│   ├── aqi_model.joblib    # Serialized model after execution
-│   └── metrics.json        # Evaluation metrics after execution
+├── raw_data.csv            # Generated dataset
+├── docs/
+│   └── index.html          # Results dashboard (GitHub Pages)
 └── src/
     ├── __init__.py
-    ├── config.py           # Centralized configuration
-    ├── ingestion.py        # Data loading and schema validation
-    ├── cleaning.py         # Cleaning, outlier handling, and reports
-    ├── features.py         # Feature engineering and preprocessing
-    ├── modeling.py         # Training, evaluation, and persistence
-    ├── exceptions.py       # Custom pipeline exceptions
-    └── logger.py           # Logging utilities
+    ├── config.py           # Columns, physical bounds, hyper-parameters
+    ├── ingestion.py        # DataIngestor
+    ├── cleaning.py         # DataCleaner, IQRCapper, DistributionReporter
+    ├── features.py         # Feature transformers + pipeline factory
+    ├── modeling.py         # ModelFactory, ModelTrainer, ModelEvaluator
+    ├── exceptions.py       # PipelineError hierarchy
+    └── logger.py
 ```
 
+`artifacts/` (`aqi_model.joblib`, `metrics.json`) is created when you run `main.py` and is git-ignored.
+
 ## Getting Started
-
-### Prerequisites
-
-- Python 3.10 or newer recommended
-- Git
-- A terminal with `pip` available
-
-### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/ojas-v/aqi-pipeline.git
 cd aqi-pipeline
-```
 
-### 2. Create a Virtual Environment
-
-**Windows PowerShell**
-
-```powershell
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
+# Windows PowerShell:  .\.venv\Scripts\Activate.ps1
+# Linux / macOS:       source .venv/bin/activate
 
-**Linux or macOS**
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
 python -m pip install --upgrade pip
 pip install -r requirements.txt
-```
-
-### 4. Run the Pipeline
-
-```bash
 python main.py
 ```
 
-The orchestrator executes the configured workflow and generates the corresponding outputs.
+`main.py` prints the stage log, the before/after descriptive-statistics table (mean, median, variance, IQR fences), the cross-validation comparison, the hold-out metrics and the top feature importances.
 
-## Outputs
+| Output | Purpose |
+|:---|:---|
+| `raw_data.csv` | Generated dirty dataset |
+| `artifacts/aqi_model.joblib` | Entire fitted pipeline (preprocessing + model) |
+| `artifacts/metrics.json` | Selected model, test metrics, run configuration |
 
-| Artifact | Purpose |
-|:--|:--|
-| `raw_data.csv` | Synthetic environmental dataset |
-| `artifacts/aqi_model.joblib` | Persisted trained model |
-| `artifacts/metrics.json` | Evaluation metrics |
+**Inference example** (the saved object is a full pipeline, so raw columns go straight in):
 
-Output availability depends on successful pipeline execution and the configured artifact paths.
+```python
+import joblib, pandas as pd
 
-## Engineering Decisions
+model = joblib.load("artifacts/aqi_model.joblib")
+X = pd.read_csv("raw_data.csv", parse_dates=["timestamp"]).drop(columns=["aqi"]).head(5)
+print(model.predict(X))
+```
 
-### 1. Leakage-Safe Preprocessing
+---
 
-Stateless data-quality rules can be applied before splitting when they do not estimate information from the dataset. Operations that learn statistics, such as median imputation, IQR capping, scaling, and encoding, belong inside the scikit-learn pipeline so they are fitted on training data only.
+## Engineering Decisions (and Interview Answers)
 
-### 2. Different Faults Require Different Treatments
-
-- Physically impossible sensor readings are treated as invalid or missing.
-- Extreme but plausible observations are handled through outlier treatment.
-- Missing target values are dropped rather than imputed with fabricated labels.
-
-### 3. Cyclical Temporal Features
-
-Hour-of-day and day-of-year features can be encoded with sine and cosine transformations, preserving the circular relationship between values such as 23:00 and 00:00.
-
-### 4. Physically Motivated Feature Engineering
-
-Environmental interactions, particulate matter ratios, and stagnation-related features can represent relationships that raw sensor measurements may not capture independently.
-
-### 5. Modular Model Development
-
-Separating configuration, feature engineering, training, evaluation, and persistence makes the pipeline easier to debug, test, and extend.
-
-### 6. Cross-Validation of the Complete Estimator
-
-Cross-validating the preprocessing and modeling pipeline together ensures that learned transformations are refitted within each training fold, reducing leakage during model selection.
+| Decision | Why |
+|:---|:---|
+| Stateless rules run **before** the split; IQR fences, medians, scaler and encoder run **inside** the `Pipeline` | Anything that learns a statistic from data must see training data only, otherwise test information leaks into training. |
+| Impossible values (humidity > 100 %, `-999`) become NaN; extreme but possible spikes are IQR-capped | Faults are missing information; spikes are real-valued but high-leverage. Different problems need different fixes. |
+| Cap first, then impute | Median imputation is outlier-robust, and capping first keeps the order valid if the strategy is switched to mean. |
+| Rows with a missing target are dropped, never imputed | Imputing labels fabricates ground truth. |
+| Cross-validate the **whole** pipeline | Preprocessing is refitted inside every training fold, so CV scores are leakage-free. |
+| Cyclical sin/cos for hour and day of year | 23:00 and 00:00 are neighbours; raw integers say they are 23 apart. |
+| Custom features: T×RH interaction, PM2.5/PM10 ratio, stagnation index | Physically motivated; the ratio separates combustion sources (fine particles) from dust (coarse). |
+| `StandardScaler` kept although trees do not need it | Lets linear / SVR / NN candidates be added to `ModelFactory` without touching the pipeline. |
+| `OneHotEncoder(handle_unknown="ignore")` | An unseen station type at inference must not crash the service. |
+| Custom exception hierarchy (`PipelineError`) | One `except` in `main.py` fails gracefully; specific errors stay catchable. |
 
 ## Limitations and Scientific Validity
 
-A high evaluation score does not automatically imply that a model can predict future real-world air quality.
+A high score does not mean the model can predict future real-world air quality.
 
-- **Synthetic data:** The model learns patterns generated by the simulator. Performance on real monitoring-station data remains unverified.
-- **Target construction:** If AQI is derived from PM2.5 or PM10 measurements included among the input features, the task can become partly circular. A high R² may reflect the target-generation formula rather than generalizable predictive power.
-- **Nowcasting vs. forecasting:** Predicting AQI from contemporaneous pollutant measurements is different from predicting AQI hours or days ahead.
-- **Temporal validation:** Random cross-validation does not establish future forecasting performance. A forecasting extension should use chronological splits or `TimeSeriesSplit`, with features constructed without future information.
-- **Generalization:** Performance across different cities, seasons, sensor types, and pollution regimes must be validated using appropriate real-world datasets.
+- **Synthetic data:** the model learns the simulator's rules. Performance on real monitoring data is unverified.
+- **Circular target:** AQI is derived from PM2.5 and PM10, which are also input features. The high R² largely reflects the target formula, not generalizable predictive power.
+- **Nowcast, not forecast:** predicting current AQI from current readings is different from predicting AQI hours or days ahead.
+- **Validation scheme:** random `KFold` is used because rows are asynchronous multi-station readings. It does not establish forecasting performance; a forecasting variant needs chronological splits (`TimeSeriesSplit`) and lag features built without future information.
+- **Generalization:** behavior across cities, seasons, sensor types and pollution regimes is untested.
 
-These limitations define the next stage of development rather than being capabilities the current implementation has already demonstrated.
+These define the next stage of work; they are not capabilities the current code has demonstrated.
 
 ## Roadmap
 
-- [ ] Add automated unit tests for ingestion, cleaning, and feature engineering.
-- [ ] Benchmark multiple regression models with consistent validation.
-- [ ] Add hyperparameter optimization using `RandomizedSearchCV`.
-- [ ] Integrate real-world air-quality monitoring datasets.
-- [ ] Build a forecasting variant using lagged and rolling features.
-- [ ] Add model explainability with SHAP.
-- [ ] Monitor data drift and prediction quality over time.
-- [ ] Develop a deployable inference API and interactive dashboard.
+- Unit tests for `DataIngestor`, `DataCleaner`, `IQRCapper` and the feature transformers (`pytest`).
+- Hyper-parameter search with `RandomizedSearchCV` on the full pipeline.
+- Benchmark `HistGradientBoostingRegressor` and a linear baseline.
+- Real-world monitoring dataset in place of the generator.
+- Forecasting variant: target AQI(t+k), lagged and rolling features, `TimeSeriesSplit`.
+- SHAP explainability and drift monitoring on the saved IQR fences.
+- Inference API.
 
+## References
+
+- J. W. Tukey, *Exploratory Data Analysis* (1977): the 1.5 × IQR fences used for capping.
+- US EPA, *Technical Assistance Document for the Reporting of Daily Air Quality (AQI)*: piece-wise linear AQI sub-index breakpoints used by the generator.
+- scikit-learn User Guide, "Common pitfalls and recommended practices" (data leakage) and "Pipelines and composite estimators".
 
 ## Team
 
 **AQI Sentinel** was developed by a team of Electronics and Communication Engineering (ECE) students.
 
 | Team Member | Discipline |
-|:--|:--|
+|:---|:---|
 | **Ojas Vaidya** | Electronics and Communication Engineering |
 | **Vivek Raj** | Electronics and Communication Engineering |
 | **Sarang Bobade** | Electronics and Communication Engineering |
 
 ---
 
-*Built by ECE students exploring the intersection of environmental sensing, data engineering, and machine learning.*
-
+*Built by ECE students exploring the intersection of environmental sensing, data engineering and machine learning.*
