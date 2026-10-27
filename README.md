@@ -77,3 +77,7 @@ The primary dataset covers Beijing and a historical period; performance elsewher
 - Ojas Vaidya — Electronics and Communication Engineering
 - Vivek Raj — Electronics and Communication Engineering
 - Sarang Bobade — Electronics and Communication Engineering
+
+## Exploratory data analysis
+
+After the dataset has been downloaded, run `python eda.py` to generate target distribution, missingness, correlation, diurnal, seasonal, and station comparison plots under `artifacts/eda/`. Use [EDA_NOTES.md](EDA_NOTES.md) to frame interpretations and limitations. The figures are generated from the downloaded real dataset; no visual insight is claimed until you inspect the outputs.
