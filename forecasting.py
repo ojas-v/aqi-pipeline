@@ -168,7 +168,7 @@ def main():
     errors.nlargest(25, "absolute_error").to_csv(ARTIFACTS / "worst_predictions.csv", index=False)
     importance = permutation_importance(final, Xte, yte, n_repeats=3, random_state=SEED,
         scoring="neg_root_mean_squared_error", n_jobs=-1)
-    pd.DataFrame({"feature": numeric, "importance_mean": importance.importances_mean,
+    pd.DataFrame({"feature": list(Xte.columns), "importance_mean": importance.importances_mean,
       "importance_std": importance.importances_std}).sort_values("importance_mean", ascending=False).to_csv(
         ARTIFACTS / "permutation_importance.csv", index=False)
     summary = {"question": "Can past observations predict PM2.5 24 hours ahead at a monitoring station?",
