@@ -97,8 +97,13 @@ def main():
                 "year", "month", "day", "hour"}
     features = [c for c in data.columns if c not in excluded]
     numeric = [c for c in features if c != "station"]
+    station_columns = sorted(data["station"].dropna().unique())
     def X(frame):
-        return frame[numeric].replace([np.inf, -np.inf], np.nan)
+        numeric_values = frame[numeric].replace([np.inf, -np.inf], np.nan)
+        station_values = pd.get_dummies(frame["station"], prefix="station", dtype=float)
+        station_values = station_values.reindex(columns=[f"station_{s}" for s in station_columns], fill_value=0.0)
+        station_values.index = numeric_values.index
+        return pd.concat([numeric_values, station_values], axis=1)
     Xtr, Xv, Xte = X(train), X(val), X(test)
     ytr, yv, yte = train[target], val[target], test[target]
     # Most recent hourly observation available at the forecast origin.
@@ -121,12 +126,21 @@ def main():
         results.append(metric_row(name, yv, model.predict(Xv)))
     print("\nValidation comparison; test set has not been used for model selection:")
     print(pd.DataFrame(results).sort_values("RMSE").to_string(index=False))
+    # Build CV folds from unique timestamps so rows from the same hour never
+    # straddle a CV train/validation boundary across stations.
+    train_times = np.sort(train["timestamp"].unique())
+    timestamp_cv = []
+    for tr_time_idx, va_time_idx in TimeSeriesSplit(n_splits=4).split(train_times):
+        tr_times, va_times = train_times[tr_time_idx], train_times[va_time_idx]
+        tr_idx = np.flatnonzero(train["timestamp"].isin(tr_times).to_numpy())
+        va_idx = np.flatnonzero(train["timestamp"].isin(va_times).to_numpy())
+        timestamp_cv.append((tr_idx, va_idx))
     search = RandomizedSearchCV(
         Pipeline([("imputer", SimpleImputer(strategy="median", add_indicator=True)),
                   ("model", RandomForestRegressor(random_state=SEED, n_jobs=-1))]),
         {"model__n_estimators": [150, 250, 350], "model__max_depth": [None, 12, 20],
          "model__min_samples_leaf": [2, 3, 5, 8], "model__max_features": [0.6, 0.8, 1.0]},
-        n_iter=8, scoring="neg_root_mean_squared_error", cv=TimeSeriesSplit(n_splits=4),
+        n_iter=8, scoring="neg_root_mean_squared_error", cv=timestamp_cv,
         random_state=SEED, n_jobs=-1, error_score="raise")
     search.fit(Xtr, ytr)
     candidates = {**models, "Tuned Random Forest": search.best_estimator_}
