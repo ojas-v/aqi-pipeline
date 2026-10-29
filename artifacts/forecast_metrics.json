@@ -1,0 +1,35 @@
+{
+  "question": "Can past observations predict PM2.5 24 hours ahead at a monitoring station?",
+  "target": "target_pm25_t_plus_24h",
+  "horizon_hours": 24,
+  "lag_hours": 24,
+  "rows_raw": 420768,
+  "rows_supervised": 411741,
+  "stations": 12,
+  "time_min": "2013-03-01 00:00:00",
+  "time_max": "2017-02-28 23:00:00",
+  "train_cut": "2015-12-17T13:00:00.000000000",
+  "validation_cut": "2016-07-23T10:00:00.000000000",
+  "selected_model": "Ridge",
+  "validation_rmse": 74.78117522308315,
+  "test_metrics": {
+    "model": "Ridge",
+    "RMSE": 81.66420671790446,
+    "MAE": 58.17266235768871,
+    "R2": 0.22787337354622494,
+    "n_evaluated": 60796
+  },
+  "persistence_test_rmse": 98.1948806598482,
+  "improvement_over_persistence_pct": 16.834557800631973,
+  "success_threshold_pct": 15,
+  "success": true,
+  "best_random_forest_params": {
+    "model__n_estimators": 150,
+    "model__min_samples_leaf": 8,
+    "model__max_features": 0.6,
+    "model__max_depth": 12
+  },
+  "dataset": "UCI Beijing Multi-Site Air Quality",
+  "license": "CC BY 4.0",
+  "random_state": 42
+}
