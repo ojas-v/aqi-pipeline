@@ -37,8 +37,8 @@ python main.py --synthetic
 
 ## Method
 
-- Construct station-wise hourly data and past-only lag features; the target is PM2.5 at t+24 hours.
-- Keep chronological periods separate: 70% training, 15% validation, 15% test, cut by unique timestamps so stations at the same hour cannot cross partitions.
+- Construct station-wise hourly data and past-only lag features, including the current PM2.5 reading available at forecast origin; the target is PM2.5 at t+24 hours.
+- Keep chronological periods separate: 70% training, 15% validation, 15% test, cut by unique timestamps so stations at the same hour cannot cross partitions. Purge 24 hours at each boundary because each label is measured 24 hours after its forecast origin; the training labels therefore end before the next partition begins. Apply the same 24-hour purge to each time-series cross-validation fold.
 - Compare persistence, mean dummy, Ridge, Random Forest, Extra Trees, and HistGradientBoosting.
 - Fit imputation inside model pipelines. Use TimeSeriesSplit and RandomizedSearchCV on training data only.
 - Select by validation RMSE, refit on train + validation, and evaluate once on the final test period.
