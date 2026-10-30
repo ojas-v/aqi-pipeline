@@ -155,6 +155,29 @@ def make_supervised(raw):
     ).reset_index(drop=True)
 
 
+def purged_time_split(data, horizon_hours=HORIZON):
+    """Chronologically split rows and purge one forecast horizon at boundaries."""
+    times = np.sort(data["timestamp"].unique())
+    if len(times) < 10:
+        raise ValueError("Not enough unique timestamps for a 70/15/15 split.")
+
+    train_cut = times[int(0.70 * len(times))]
+    val_cut = times[int(0.85 * len(times))]
+    purge = pd.Timedelta(hours=horizon_hours)
+
+    train = data[data["timestamp"] < train_cut - purge].copy()
+    val = data[
+        (data["timestamp"] >= train_cut)
+        & (data["timestamp"] < val_cut - purge)
+    ].copy()
+    test = data[data["timestamp"] >= val_cut].copy()
+
+    if train.empty or val.empty or test.empty:
+        raise ValueError("A chronological split is empty after purging.")
+
+    return train, val, test, train_cut, val_cut
+
+
 def metric_row(name, y, pred):
     """Calculate metrics using only finite target/prediction pairs."""
     y = np.asarray(y, dtype=float).reshape(-1)
@@ -195,27 +218,9 @@ def main():
 
     data = make_supervised(raw)
 
-    # Chronological split with a 24-hour purge at each boundary.
-    # A row at time t has its label at t + HORIZON, so training labels
-    # must be fully observed before the next partition begins.
-    times = np.sort(data["timestamp"].unique())
-    train_cut = times[int(0.70 * len(times))]
-    val_cut = times[int(0.85 * len(times))]
+    # Purge one forecast horizon at each boundary to prevent target overlap.
+    train, val, test, train_cut, val_cut = purged_time_split(data)
     purge = pd.Timedelta(hours=HORIZON)
-    train_label_cut = train_cut
-    val_label_cut = val_cut
-
-    train = data[
-        data.timestamp < train_cut - purge
-    ].copy()
-    val = data[
-        (data.timestamp >= train_cut)
-        & (data.timestamp < val_cut - purge)
-    ].copy()
-    test = data[data.timestamp >= val_cut].copy()
-
-    if train.empty or val.empty or test.empty:
-        raise ValueError("A chronological split is empty after the 24-hour purge.")
 
     print(
         f"Purged {HORIZON} hours before validation and test; "
