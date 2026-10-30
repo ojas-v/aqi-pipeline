@@ -115,6 +115,10 @@ def make_supervised(raw):
             hourly["PM2.5"].shift(-HORIZON)
         )
 
+        # Current reading at forecast origin. This gives every model the
+        # same latest observation that the persistence baseline uses.
+        hourly["pm25_current"] = hourly["PM2.5"]
+
         for lag in range(1, LAGS + 1):
             hourly[f"pm25_lag_{lag}h"] = hourly["PM2.5"].shift(lag)
 
@@ -191,18 +195,32 @@ def main():
 
     data = make_supervised(raw)
 
-    # Split by timestamp so observations from the same hour across
-    # different stations cannot fall into different data partitions.
+    # Chronological split with a 24-hour purge at each boundary.
+    # A row at time t has its label at t + HORIZON, so training labels
+    # must be fully observed before the next partition begins.
     times = np.sort(data["timestamp"].unique())
     train_cut = times[int(0.70 * len(times))]
     val_cut = times[int(0.85 * len(times))]
+    purge = pd.Timedelta(hours=HORIZON)
+    train_label_cut = train_cut
+    val_label_cut = val_cut
 
-    train = data[data.timestamp < train_cut].copy()
+    train = data[
+        data.timestamp < train_cut - purge
+    ].copy()
     val = data[
         (data.timestamp >= train_cut)
-        & (data.timestamp < val_cut)
+        & (data.timestamp < val_cut - purge)
     ].copy()
     test = data[data.timestamp >= val_cut].copy()
+
+    if train.empty or val.empty or test.empty:
+        raise ValueError("A chronological split is empty after the 24-hour purge.")
+
+    print(
+        f"Purged {HORIZON} hours before validation and test; "
+        f"train={len(train):,}, validation={len(val):,}, test={len(test):,}."
+    )
 
     target = "target_pm25_t_plus_24h"
 
@@ -352,22 +370,25 @@ def main():
         .to_string(index=False)
     )
 
-    # Build cross-validation folds from unique timestamps.
+    # TimeSeriesSplit is applied to unique timestamps. Purge the final
+    # 24 hours of each CV training fold so no training target reaches
+    # into that fold's validation period.
     train_times = np.sort(train["timestamp"].unique())
     timestamp_cv = []
 
-    for tr_time_idx, va_time_idx in TimeSeriesSplit(
-        n_splits=4
-    ).split(train_times):
-        tr_times = train_times[tr_time_idx]
+    for _, va_time_idx in TimeSeriesSplit(n_splits=4).split(train_times):
         va_times = train_times[va_time_idx]
+        va_start = va_times[0]
 
         tr_idx = np.flatnonzero(
-            train["timestamp"].isin(tr_times).to_numpy()
+            (train["timestamp"] < va_start - purge).to_numpy()
         )
         va_idx = np.flatnonzero(
             train["timestamp"].isin(va_times).to_numpy()
         )
+
+        if len(tr_idx) == 0 or len(va_idx) == 0:
+            raise ValueError("A time-series CV fold is empty after purging.")
 
         timestamp_cv.append((tr_idx, va_idx))
 
@@ -521,6 +542,8 @@ def main():
         "time_max": str(raw.timestamp.max()),
         "train_cut": str(train_cut),
         "validation_cut": str(val_cut),
+        "forecast_horizon_hours": HORIZON,
+        "purged_hours_at_partition_boundaries": HORIZON,
         "selected_model": best_name,
         "validation_rmse": val_rmse[best_name],
         "test_metrics": test_metrics,
